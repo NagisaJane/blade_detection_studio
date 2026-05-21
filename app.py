@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from ultralytics import YOLO
 from PIL import Image
 import tempfile
@@ -8,6 +9,9 @@ from datetime import datetime
 import io
 import json
 import requests
+import base64
+from pathlib import Path
+from typing import Optional
 
 # --- 1. UI 基本准则配置 --- [cite: 21, 22, 23]
 st.set_page_config(layout="wide", page_title="BLADE STUDIO")
@@ -25,6 +29,38 @@ LABEL_ALIAS_MAP = {
     "前缘腐蚀": "LeadingEdgeCorrosion",
     "裂纹": "Crack",
 }
+VIDEO_URL = (
+    "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/"
+    "hf_20260328_083109_283f3553-e28f-428b-a723-d639c617eb2b.mp4"
+)
+CINE_BLACK = "#000000"
+CINE_MUTED = "#6F6F6F"
+CINE_WHITE = "#FFFFFF"
+
+PAGE_HERO = {
+    "检测": {
+        "title": "穿透噪声，<em>看见</em>每一处缺陷",
+        "desc": "上传模型与叶片图像，完成智能检测、可视化标注与结果导出。",
+    },
+    "历史数据": {
+        "title": "每一次检测，<em>皆有迹可循</em>",
+        "desc": "按类型、置信度与时间维度筛选历史记录，追溯检测全过程。",
+    },
+    "AI 分析": {
+        "title": "让数据开口，<em>辅助决策</em>",
+        "desc": "基于检测结果图与结构化缺陷信息，进行对话式智能分析。",
+    },
+}
+BG_IMAGE_PATHS = [
+    Path(__file__).parent / "assets" / "site_bg.jpg",
+    Path(r"C:\Users\Yang\Downloads\전남 동부권, 재생E 시대의 산업대전환 골든타임을 잡아야 합니다! 서부권은 통합 전략으로 미래를 만드는데, 동부는 전력비_탄소비용 위기에 직면_ 흩어진 노력을 모아 강력한 미래 전략이 필요해요!__#전남동부발전 #산업대전환 #재생에너지.jpg"),
+]
+LOGO_CANDIDATE_PATHS = [
+    Path(r"C:\Users\Yang\.cursor\projects\c-Users-Yang-Desktop-SAGA0412\assets\c__Users_Yang_AppData_Roaming_Cursor_User_workspaceStorage_5b5042a3c44db8056b762b1b4f32416e_images_image-e039e56d-68a9-44ed-9ac1-1c793c19c34f.png"),
+    Path(__file__).with_name("logo.png"),
+    Path(__file__).with_name("logo.jpg"),
+    Path(r"C:\Users\Yang\.cursor\projects\c-Users-Yang-Desktop-SAGA0412\assets\c__Users_Yang_AppData_Roaming_Cursor_User_workspaceStorage_5b5042a3c44db8056b762b1b4f32416e_images______20260513200355_411_134-fe4403de-3067-4746-b088-a514e41fdb88.png"),
+]
 
 
 def _pick_box_color(label: str):
@@ -95,6 +131,106 @@ def build_report_text(record: dict):
         for idx, item in enumerate(record["defects"], start=1):
             lines.append(f"缺陷 {idx}: {item['label']} (置信度 {item['conf'] * 100:.1f}%)")
     return "\n".join(lines)
+
+
+def load_bg_data_uri():
+    for p in BG_IMAGE_PATHS:
+        if p.exists():
+            suffix = p.suffix.lower()
+            mime = "image/jpeg" if suffix in {".jpg", ".jpeg"} else "image/png"
+            encoded = base64.b64encode(p.read_bytes()).decode("utf-8")
+            return f"data:{mime};base64,{encoded}"
+    return None
+
+
+def render_cinematic_hero(page_name: str, logo_uri: Optional[str]):
+    hero = PAGE_HERO.get(page_name, PAGE_HERO["检测"])
+    logo_html = f'<img src="{logo_uri}" class="cine-logo" alt="logo"/>' if logo_uri else ""
+    st.markdown(
+        f"""
+        <div class="cine-hero">
+            <div class="cine-nav">
+                <div class="cine-nav-left">{logo_html}<span class="cine-brand">BLADE STUDIO<sup>®</sup></span></div>
+                <span class="cine-nav-meta">风电叶片缺陷检测分析系统</span>
+            </div>
+            <div class="cine-hero-body">
+                <h1 class="cine-headline animate-fade-rise">{hero["title"]}</h1>
+                <p class="cine-desc animate-fade-rise-delay">{hero["desc"]}</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def inject_cinematic_video():
+    st.markdown(
+        f"""
+        <div class="cine-video-wrap">
+            <video id="cine-bg-video" class="cine-video" autoplay muted playsinline loop>
+                <source src="{VIDEO_URL}" type="video/mp4"/>
+            </video>
+            <div class="cine-video-gradient"></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    components.html(
+        """
+        <script>
+        (function () {
+            const doc = window.parent.document;
+            const video = doc.getElementById("cine-bg-video");
+            if (!video || video.dataset.cineBound === "1") return;
+            video.dataset.cineBound = "1";
+            video.removeAttribute("loop");
+            const FADE = 0.5;
+            const tick = () => {
+                const d = video.duration;
+                if (d && isFinite(d)) {
+                    let op = 1;
+                    const t = video.currentTime;
+                    if (t < FADE) op = t / FADE;
+                    else if (d - t < FADE) op = (d - t) / FADE;
+                    video.style.opacity = Math.max(0, Math.min(1, op));
+                }
+                requestAnimationFrame(tick);
+            };
+            video.addEventListener("ended", () => {
+                video.style.opacity = "0";
+                setTimeout(() => { video.currentTime = 0; video.play(); }, 100);
+            });
+            video.addEventListener("canplay", () => video.play());
+            requestAnimationFrame(tick);
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+
+def load_logo_data_uri():
+    target_bg = np.array([222, 229, 240], dtype=np.uint8)  # 侧边栏浅灰蓝底色
+    for p in LOGO_CANDIDATE_PATHS:
+        if p.exists():
+            try:
+                img = Image.open(p).convert("RGBA")
+                arr = np.array(img)
+                rgb = arr[:, :, :3]
+
+                # 将接近白色的背景替换为侧边栏颜色，保留图标主体
+                white_mask = (rgb[:, :, 0] > 225) & (rgb[:, :, 1] > 225) & (rgb[:, :, 2] > 225)
+                arr[white_mask, :3] = target_bg
+
+                out = Image.fromarray(arr, mode="RGBA")
+                buf = io.BytesIO()
+                out.save(buf, format="PNG")
+                encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
+                return f"data:image/png;base64,{encoded}"
+            except Exception:
+                encoded = base64.b64encode(p.read_bytes()).decode("utf-8")
+                return f"data:image/png;base64,{encoded}"
+    return None
 
 
 def generate_ai_reply(user_text: str, record: dict):
@@ -194,96 +330,263 @@ def call_llm_api(user_text: str, record: dict, chat_history: list, llm_cfg: dict
     except Exception as e:
         return False, f"API 调用异常：{e}"
 
-# 自定义 CSS 强化分区与样式 [cite: 2, 23, 24]
+logo_data_uri = load_logo_data_uri()
+bg_data_uri = load_bg_data_uri()
+bg_css = ""
+if bg_data_uri:
+    bg_css = f"""
+    .stApp {{
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.88) 0%, rgba(255,255,255,0.72) 45%, rgba(255,255,255,0.88) 100%),
+            url("{bg_data_uri}") center center / cover no-repeat fixed !important;
+    }}
+    """
+else:
+    bg_css = f"""
+    .stApp {{
+        background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(238,242,247,0.85) 100%) !important;
+    }}
+    """
+
+# 自定义 CSS — Cinematic Hero 风格融入 BLADE STUDIO
 st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap');
+    {bg_css}
+    @keyframes fadeSlideUp {{
+        from {{ opacity: 0; transform: translateY(18px); }}
+        to   {{ opacity: 1; transform: translateY(0); }}
+    }}
+    @keyframes fadeIn {{
+        from {{ opacity: 0; }}
+        to   {{ opacity: 1; }}
+    }}
+    @keyframes slideInLeft {{
+        from {{ opacity: 0; transform: translateX(-12px); }}
+        to   {{ opacity: 1; transform: translateX(0); }}
+    }}
+    @keyframes navPulse {{
+        0%, 100% {{ box-shadow: 0 0 0 0 rgba(22, 119, 255, 0); }}
+        50%      {{ box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.12); }}
+    }}
+    @keyframes shimmer {{
+        0%   {{ background-position: -200% 0; }}
+        100% {{ background-position: 200% 0; }}
+    }}
+
+    @keyframes fade-rise {{
+        from {{ opacity: 0; transform: translateY(20px); }}
+        to   {{ opacity: 1; transform: translateY(0); }}
+    }}
+    .animate-fade-rise {{ animation: fade-rise 0.8s ease-out both; }}
+    .animate-fade-rise-delay {{ animation: fade-rise 0.8s ease-out 0.2s both; }}
+    .animate-fade-rise-delay-2 {{ animation: fade-rise 0.8s ease-out 0.4s both; }}
+
     html, body, [class*="css"] {{
-        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+        font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+        scroll-behavior: smooth;
+    }}
+    h1, h2, h3, .cine-brand, .cine-headline {{
+        font-family: "Instrument Serif", "PingFang SC", serif !important;
     }}
     .stApp {{
-        background: {NEUTRAL_BG};
-        color: {TEXT_COLOR};
+        color: {CINE_BLACK};
+        position: relative;
+    }}
+    /* 电影感视频背景层 */
+    .cine-video-wrap {{
+        position: fixed;
+        top: 300px;
+        left: 0; right: 0; bottom: 0;
+        z-index: 0;
+        overflow: hidden;
+        pointer-events: none;
+    }}
+    .cine-video {{
+        width: 100%; height: 100%;
+        object-fit: cover;
+        opacity: 0;
+    }}
+    .cine-video-gradient {{
+        position: absolute; inset: 0;
+        background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.2) 40%, rgba(255,255,255,0.92) 100%);
+    }}
+    [data-testid="stAppViewContainer"] {{
+        position: relative;
+        z-index: 1;
+    }}
+    section[data-testid="stSidebar"], div[data-testid="stSidebar"] {{
+        background: rgba(255, 255, 255, 0.72) !important;
+        backdrop-filter: blur(16px);
+        border-right: 1px solid rgba(0,0,0,0.06) !important;
+        z-index: 2;
+    }}
+    [data-testid="stAppViewContainer"] .main .block-container {{
+        background: transparent;
+        max-width: 1200px;
+        padding-top: 0.25rem;
+        padding-bottom: 2rem;
+    }}
+    /* Cinematic Hero */
+    .cine-hero {{
+        margin-bottom: 28px;
+        padding: 0 4px;
+    }}
+    .cine-nav {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0 20px;
+        border-bottom: 1px solid rgba(0,0,0,0.06);
+        margin-bottom: 28px;
+    }}
+    .cine-nav-left {{
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }}
+    .cine-logo {{
+        height: 52px;
+        width: auto;
+        border-radius: 6px;
+    }}
+    .cine-brand {{
+        font-size: 1.75rem;
+        letter-spacing: -0.02em;
+        color: {CINE_BLACK};
+        font-weight: 400;
+    }}
+    .cine-brand sup {{ font-size: 0.55em; }}
+    .cine-nav-meta {{
+        font-size: 0.82rem;
+        color: {CINE_MUTED};
+        font-weight: 500;
+    }}
+    .cine-hero-body {{
+        text-align: center;
+        padding: 12px 12px 8px;
+    }}
+    .cine-headline {{
+        font-size: clamp(2rem, 5vw, 3.5rem);
+        font-weight: 400;
+        line-height: 0.95;
+        letter-spacing: -2.46px;
+        color: {CINE_BLACK};
+        margin: 0;
+        max-width: 900px;
+        margin-left: auto;
+        margin-right: auto;
+    }}
+    .cine-headline em {{
+        font-style: italic;
+        color: {CINE_MUTED};
+    }}
+    .cine-desc {{
+        font-size: 1rem;
+        line-height: 1.65;
+        color: {CINE_MUTED};
+        max-width: 640px;
+        margin: 20px auto 0;
+    }}
+    /* 主内容区切换动画容器 */
+    .page-shell {{
+        animation: fadeSlideUp 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }}
+    .page-shell .module-box {{
+        animation: fadeSlideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }}
+    .page-shell .module-box:nth-child(1) {{ animation-delay: 0.04s; }}
+    .page-shell .module-box:nth-child(2) {{ animation-delay: 0.08s; }}
+    .page-shell .module-box:nth-child(3) {{ animation-delay: 0.12s; }}
+    .page-title {{
+        animation: slideInLeft 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+        margin-bottom: 0.25rem;
+    }}
+    .page-caption {{
+        animation: fadeIn 0.45s ease both;
+        animation-delay: 0.06s;
+        color: #5B6B88;
+        font-size: 13px;
+        margin-bottom: 1rem;
+    }}
+    header[data-testid="stHeader"] {{
+        display: none !important;
+        height: 0 !important;
+    }}
+    div[data-testid="stToolbar"] {{
+        display: none !important;
+    }}
+    [data-testid="stAppViewContainer"] > .main {{
+        padding-top: 0 !important;
     }}
     [data-testid="stAppViewContainer"] .main .block-container {{
         max-width: 1200px;
-        padding-top: 1rem;
+        padding-top: 0.25rem;
         padding-bottom: 2rem;
     }}
     [data-testid="stAppViewContainer"] .main .stButton>button {{
-        background-color: {MAIN_COLOR};
-        color: white;
-        border-radius: 10px;
+        background-color: {CINE_BLACK};
+        color: {CINE_WHITE};
+        border-radius: 999px;
         height: 44px;
         width: 100%;
         border: none;
         font-weight: 600;
+        font-family: "Inter", sans-serif !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }}
+    [data-testid="stAppViewContainer"] .main .stButton>button:hover {{
+        transform: scale(1.03);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
     }}
     section[data-testid="stSidebar"] .stButton>button {{
         width: 100%;
-        min-height: 52px;
-        border-radius: 14px;
-        font-size: 26px;
+        min-height: 46px;
+        border-radius: 10px;
+        font-size: 15px;
         font-weight: 600;
         border: 1px solid transparent;
         background: transparent;
         color: #4B5568 !important;
         box-shadow: none !important;
         text-align: left;
-        padding-left: 18px;
+        padding-left: 16px;
+        transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+        position: relative;
+        overflow: hidden;
     }}
     section[data-testid="stSidebar"] .stButton>button * {{
         color: inherit !important;
+        transition: color 0.2s ease;
     }}
     section[data-testid="stSidebar"] .stButton>button:hover {{
-        border-color: #E4E9F1;
-        background: #F3F5F8;
-        color: #374151 !important;
+        border-color: #D0DAEA;
+        background: rgba(255, 255, 255, 0.55);
+        color: #1F2A44 !important;
+        transform: translateX(3px);
     }}
     section[data-testid="stSidebar"] .stButton>button[kind="primary"] {{
-        background: #F3F5F8;
-        border-color: #E4E9F1;
-        color: #1677FF !important;
-        box-shadow: none !important;
+        background: rgba(255,255,255,0.95);
+        border-color: rgba(0,0,0,0.08);
+        color: {CINE_BLACK} !important;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
     }}
-    .top-nav {{
-        height: 80px;
-        background: {MAIN_COLOR};
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 22px;
-        margin-bottom: 14px;
-        box-shadow: 0 6px 16px rgba(47, 84, 235, 0.18);
-    }}
-    .top-nav-logo {{
-        color: #FFFFFF;
-        font-size: 26px;
-        font-weight: 800;
-        letter-spacing: 0.8px;
-    }}
-    .top-nav-meta {{
-        color: #DCE8FF;
-        font-size: 13px;
-        font-weight: 600;
-    }}
-    div[data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, #1F2A44 0%, #2C3B62 100%);
-        border-right: 1px solid #42527A;
-    }}
-    div[data-testid="stSidebar"] {{
-        color: #EAF0FF;
+    section[data-testid="stSidebar"] .stButton>button[kind="primary"]::before {{
+        content: "";
+        position: absolute;
+        left: 0; top: 8px; bottom: 8px;
+        width: 3px;
+        border-radius: 0 3px 3px 0;
+        background: {CINE_BLACK};
     }}
     .sidebar-brand {{
-        font-size: 24px;
-        font-weight: 800;
-        letter-spacing: 0.8px;
+        font-family: "Instrument Serif", serif !important;
+        font-size: 1.4rem;
+        color: {CINE_BLACK};
         margin-bottom: 4px;
-        color: #FFFFFF;
-        text-shadow: 0 2px 10px rgba(145, 193, 255, 0.25);
     }}
     .sidebar-sub {{
-        color: #C7D5F7;
+        color: {CINE_MUTED};
         font-size: 12px;
         margin-bottom: 16px;
     }}
@@ -299,22 +602,79 @@ st.markdown(f"""
     }}
     .sidebar-chip {{
         display: inline-block;
-        padding: 3px 9px;
+        padding: 3px 10px;
         border-radius: 999px;
-        font-size: 12px;
-        background: rgba(145, 193, 255, 0.18);
-        border: 1px solid rgba(145, 193, 255, 0.52);
-        color: #DDEBFF;
+        font-size: 11px;
+        background: rgba(0,0,0,0.05);
+        border: 1px solid rgba(0,0,0,0.08);
+        color: {CINE_MUTED};
+        font-weight: 600;
+        letter-spacing: 0.02em;
     }}
-    .module-box {{ padding: 20px; border-radius: 10px; border: 1px solid #D9D9D9; margin-bottom: 20px; }}
-    .module-config {{ background-color: #F8FBFF; border-left: 4px solid #2F54EB; }}
-    .module-analysis {{ background-color: #F6FFED; border-left: 4px solid #52C41A; }}
-    .module-upload {{ background-color: #FFFBEF; border-left: 4px solid #FAAD14; }}
-    .module-divider {{ margin: 8px 0 18px 0; border-top: 1px dashed #D9D9D9; }}
+    .module-box {{
+        padding: 22px 24px;
+        border-radius: 16px;
+        border: 1px solid rgba(0,0,0,0.06);
+        margin-bottom: 16px;
+        background: rgba(255, 255, 255, 0.78);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 4px 24px rgba(0,0,0,0.04);
+        transition: box-shadow 0.25s ease, transform 0.25s ease;
+    }}
+    .module-box:hover {{
+        box-shadow: 0 6px 20px rgba(31, 42, 68, 0.09);
+        transform: translateY(-1px);
+    }}
+    .module-config {{ border-left: 4px solid #2F54EB; }}
+    .module-analysis {{ border-left: 4px solid #52C41A; }}
+    .module-upload {{ border-left: 4px solid #FAAD14; }}
+    .module-divider {{ margin: 4px 0 16px 0; border-top: 1px solid #D8E0ED; }}
+    .glass-panel {{
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(200, 212, 232, 0.75);
+        border-radius: 14px;
+        padding: 18px;
+        box-shadow: 0 2px 12px rgba(31, 42, 68, 0.06);
+        backdrop-filter: blur(10px);
+        animation: fadeSlideUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }}
     .model-file-hint {{ font-size: 13px; margin-bottom: 8px; }}
     .model-file-hint.unselected {{ color: #8C8C8C; }}
     .model-file-hint.selected {{ color: #2F54EB; font-weight: 600; }}
-    .status-chip {{ display: inline-block; color: white; padding: 3px 10px; border-radius: 999px; margin-right: 8px; font-size: 13px; }}
+    .status-chip {{
+        display: inline-block;
+        color: white;
+        padding: 4px 12px;
+        border-radius: 999px;
+        margin-right: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: transform 0.2s ease;
+    }}
+    .status-chip:hover {{ transform: scale(1.04); }}
+    div[data-testid="stChatMessage"] {{
+        animation: fadeSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }}
+    [data-testid="stExpander"] {{
+        animation: fadeSlideUp 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+        border-radius: 10px !important;
+        border: 1px solid #D8E0ED !important;
+        background: rgba(255,255,255,0.6) !important;
+        transition: box-shadow 0.2s ease;
+    }}
+    [data-testid="stExpander"]:hover {{
+        box-shadow: 0 4px 14px rgba(31, 42, 68, 0.07);
+    }}
+    [data-testid="stAppViewContainer"] .main .stButton>button {{
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }}
+    [data-testid="stAppViewContainer"] .main .stButton>button:hover {{
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(47, 84, 235, 0.25);
+    }}
+    [data-testid="stAppViewContainer"] .main .stButton>button:active {{
+        transform: translateY(0);
+    }}
     .status-pending {{ background-color: #FAAD14; }}
     .status-detected {{ background-color: #52C41A; }}
     .status-defect {{ background-color: #F5222D; }}
@@ -324,6 +684,24 @@ st.markdown(f"""
     div[data-testid="stTextInput"] input:not(:placeholder-shown) {{
         color: #2F54EB;
         font-weight: 600;
+    }}
+    div[data-testid="stBottomBlockContainer"],
+    div[data-testid="stChatFloatingInputContainer"],
+    div[data-testid="stChatInputContainer"],
+    div[data-testid="stChatInputContainer"] > div,
+    div[data-testid="stChatInput"] > div,
+    div[data-testid="stChatInput"] textarea {{
+        background: rgba(255,255,255,0.75) !important;
+        backdrop-filter: blur(12px);
+    }}
+    div[data-testid="stChatInput"] > div {{
+        border: 1px solid rgba(0,0,0,0.08) !important;
+        border-radius: 999px !important;
+    }}
+    div[data-testid="stChatInput"] button {{
+        background: {CINE_BLACK} !important;
+        color: {CINE_WHITE} !important;
+        border-radius: 999px !important;
     }}
     .app-footer {{
         min-height: 80px;
@@ -361,15 +739,16 @@ with st.sidebar:
 
     def _switch_page(target_page: str):
         if st.session_state.page != target_page:
+            st.session_state.prev_page = st.session_state.page
             st.session_state.page = target_page
             st.rerun()
 
     st.markdown('<div class="sidebar-nav-wrap">', unsafe_allow_html=True)
-    if st.button("检测", key="nav_detect", use_container_width=True, type="primary" if st.session_state.page == "检测" else "secondary"):
+    if st.button("🔍  检测", key="nav_detect", use_container_width=True, type="primary" if st.session_state.page == "检测" else "secondary"):
         _switch_page("检测")
-    if st.button("历史数据", key="nav_history", use_container_width=True, type="primary" if st.session_state.page == "历史数据" else "secondary"):
+    if st.button("📋  历史数据", key="nav_history", use_container_width=True, type="primary" if st.session_state.page == "历史数据" else "secondary"):
         _switch_page("历史数据")
-    if st.button("AI 分析", key="nav_ai", use_container_width=True, type="primary" if st.session_state.page == "AI 分析" else "secondary"):
+    if st.button("🤖  AI 分析", key="nav_ai", use_container_width=True, type="primary" if st.session_state.page == "AI 分析" else "secondary"):
         _switch_page("AI 分析")
     st.markdown('</div>', unsafe_allow_html=True)
     page = st.session_state.page
@@ -392,13 +771,8 @@ with st.sidebar:
         key="llm_api_key_input"
     )
 
-st.markdown(
-    '<div class="top-nav">'
-    '<div class="top-nav-logo">BLADE STUDIO</div>'
-    '<div class="top-nav-meta">风电叶片缺陷检测分析系统</div>'
-    '</div>',
-    unsafe_allow_html=True
-)
+inject_cinematic_video()
+render_cinematic_hero(page, logo_data_uri)
 
 if "stats" not in st.session_state:
     st.session_state.stats = {"pending": 0, "detected": 0, "defects": 0}
@@ -408,10 +782,12 @@ if "last_result" not in st.session_state:
     st.session_state.last_result = None
 if "ai_messages" not in st.session_state:
     st.session_state.ai_messages = []
+if "prev_page" not in st.session_state:
+    st.session_state.prev_page = "检测"
+
+st.markdown('<div class="page-shell">', unsafe_allow_html=True)
 
 if page == "检测":
-
-    # --- 3. 第一阶段：模型与推理配置 --- [cite: 1, 3]
     col1, col2 = st.columns([1, 1])
     
     with col1:
@@ -578,7 +954,7 @@ if page == "检测":
             )
     st.markdown('</div>', unsafe_allow_html=True)
 elif page == "历史数据":
-    st.subheader("历史检测记录")
+    st.markdown('<div class="glass-panel animate-fade-rise-delay-2">', unsafe_allow_html=True)
     if not st.session_state.history:
         st.info("暂无历史记录。完成一次检测后会自动出现在这里。")
     else:
@@ -622,9 +998,8 @@ elif page == "历史数据":
                         c1, c2 = st.columns([4, 1])
                         c1.progress(defect["conf"])
                         c2.markdown(f"`{defect['conf'] * 100:.1f}%`")
+    st.markdown('</div>', unsafe_allow_html=True)
 elif page == "AI 分析":
-    st.subheader("AI 分析")
-    st.caption("基于检测结果图进行对话式分析")
 
     if st.session_state.last_result:
         selected_record = st.session_state.last_result["record"]
@@ -673,3 +1048,5 @@ elif page == "AI 分析":
                 reply = f"{reply}\n\n---\n已切换本地分析回复：\n{fallback}"
             st.session_state.ai_messages.append({"role": "assistant", "content": reply})
             st.rerun()
+
+st.markdown('</div>', unsafe_allow_html=True)

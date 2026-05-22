@@ -1,6 +1,10 @@
-streamlit
+streamlit>=1.32.0
+# headless 必须优先/靠后各声明一次，避免 ultralytics 拉取 opencv-python（需 libGL）
+opencv-python-headless>=4.8.0
+torch
+torchvision
 ultralytics
-opencv-python-headless
+opencv-python-headless>=4.8.0
 pillow
 numpy
 requests

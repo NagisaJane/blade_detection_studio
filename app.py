@@ -1,9 +1,9 @@
 import streamlit as st
 import streamlit.components.v1 as components
-from ultralytics import YOLO
 from PIL import Image
 import tempfile
 import cv2
+from ultralytics import YOLO
 import numpy as np
 from datetime import datetime
 import io
@@ -52,14 +52,14 @@ PAGE_HERO = {
     },
 }
 BG_IMAGE_PATHS = [
+    Path(__file__).parent / "site_bg.jpg",
     Path(__file__).parent / "assets" / "site_bg.jpg",
-    Path(r"C:\Users\Yang\Downloads\전남 동부권, 재생E 시대의 산업대전환 골든타임을 잡아야 합니다! 서부권은 통합 전략으로 미래를 만드는데, 동부는 전력비_탄소비용 위기에 직면_ 흩어진 노력을 모아 강력한 미래 전략이 필요해요!__#전남동부발전 #산업대전환 #재생에너지.jpg"),
 ]
 LOGO_CANDIDATE_PATHS = [
-    Path(r"C:\Users\Yang\.cursor\projects\c-Users-Yang-Desktop-SAGA0412\assets\c__Users_Yang_AppData_Roaming_Cursor_User_workspaceStorage_5b5042a3c44db8056b762b1b4f32416e_images_image-e039e56d-68a9-44ed-9ac1-1c793c19c34f.png"),
-    Path(__file__).with_name("logo.png"),
-    Path(__file__).with_name("logo.jpg"),
-    Path(r"C:\Users\Yang\.cursor\projects\c-Users-Yang-Desktop-SAGA0412\assets\c__Users_Yang_AppData_Roaming_Cursor_User_workspaceStorage_5b5042a3c44db8056b762b1b4f32416e_images______20260513200355_411_134-fe4403de-3067-4746-b088-a514e41fdb88.png"),
+    Path(__file__).parent / "logo_blade_detection_studio.png",
+    Path(__file__).parent / "assets" / "logo_blade_detection_studio.png",
+    Path(__file__).parent / "assets" / "logo.png",
+    Path(__file__).parent / "logo.png",
 ]
 
 
